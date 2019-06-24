@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
-	"net/http"
 	"os"
 	"path"
 	"time"
@@ -29,9 +28,10 @@ type benchParams struct {
 }
 
 type config struct {
-	Params   benchParams         `yaml:",inline"`
-	Protocol string              `yaml:"Protocol"`
-	Request  WebRequesterFactory `yaml:"Request"`
+	Params      benchParams          `yaml:",inline"`
+	Protocol    string               `yaml:"Protocol"`
+	Request     WebRequesterFactory  `yaml:"Request"`
+	GRPCRequest GRPCRequesterFactory `yaml:"GRPCRequest"`
 }
 
 func maybePanic(err error) {
@@ -44,6 +44,40 @@ func assert(cond bool, err string) {
 	if !cond {
 		log.Panic(errors.New(err))
 	}
+}
+
+func prepareRequestorFactory(conf *config) bench.RequesterFactory {
+
+	if conf.Params.RequestTimeout == 0 {
+		conf.Params.RequestTimeout = 10 * time.Second
+	}
+
+	if conf.Params.Clients == 0 {
+		clients := conf.Params.RequestRatePerSec * uint64(math.Ceil(conf.Params.RequestTimeout.Seconds()))
+		clients += clients / 5 // add 20%
+		conf.Params.Clients = clients
+		fmt.Println("Clients:", clients)
+	}
+
+	if conf.Protocol == "" {
+		conf.Protocol = "HTTP/1.1"
+	}
+
+	fmt.Println("Protocol:", conf.Protocol)
+
+	switch conf.Protocol {
+	case "GRPC":
+		fmt.Println("Using GRPC")
+		return &conf.GRPCRequest
+	case "HTTP/2":
+		initHTTP2Client(conf.Params.RequestTimeout, conf.Params.DontLinger)
+	case "HTTP/1.1":
+		initHTTPClient(conf.Params.ReuseConnections, conf.Params.RequestTimeout, conf.Params.DontLinger)
+	default:
+		log.Panic("Invalid protocol - must be GRPC, HTTP/2 or HTTP/1.1")
+	}
+
+	return &conf.Request
 }
 
 func main() {
@@ -62,45 +96,8 @@ func main() {
 
 	// fmt.Printf("%+v\n", conf)
 	fmt.Println("timeStart =", time.Now().UTC().Add(-5*time.Second).Truncate(time.Second))
-
-	if conf.Request.ExpectedHTTPStatusCode == 0 {
-		conf.Request.ExpectedHTTPStatusCode = 200
-	}
-
-	if conf.Request.HTTPMethod == "" {
-		if conf.Request.Body == "" {
-			conf.Request.HTTPMethod = http.MethodGet
-		} else {
-			conf.Request.HTTPMethod = http.MethodPost
-		}
-	}
-
-	if conf.Protocol == "" {
-		conf.Protocol = "HTTP/1.1"
-	}
-
-	fmt.Println("Protocol:", conf.Protocol)
-
-	switch conf.Protocol {
-	case "HTTP/2":
-		initHTTP2Client(conf.Params.RequestTimeout, conf.Params.DontLinger)
-
-	default:
-		initHTTPClient(conf.Params.ReuseConnections, conf.Params.RequestTimeout, conf.Params.DontLinger)
-	}
-
-	if conf.Params.RequestTimeout == 0 {
-		conf.Params.RequestTimeout = 10 * time.Second
-	}
-
-	if conf.Params.Clients == 0 {
-		clients := conf.Params.RequestRatePerSec * uint64(math.Ceil(conf.Params.RequestTimeout.Seconds()))
-		clients += clients / 5 // add 20%
-		conf.Params.Clients = clients
-		fmt.Println("Clients:", clients)
-	}
-
-	benchmark := bench.NewBenchmark(&conf.Request, conf.Params.RequestRatePerSec, conf.Params.Clients, conf.Params.Duration, conf.Params.BaseLatency)
+	factory := prepareRequestorFactory(&conf)
+	benchmark := bench.NewBenchmark(factory, conf.Params.RequestRatePerSec, conf.Params.Clients, conf.Params.Duration, conf.Params.BaseLatency)
 	summary, err := benchmark.Run(conf.Params.OutputJSON, conf.Params.TightTicker)
 	maybePanic(err)
 

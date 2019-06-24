@@ -100,6 +100,17 @@ type WebRequesterFactory struct {
 
 // GetRequester returns a new Requester, called for each Benchmark connection.
 func (w *WebRequesterFactory) GetRequester(uint64) bench.Requester {
+	if w.ExpectedHTTPStatusCode == 0 {
+		w.ExpectedHTTPStatusCode = 200
+	}
+
+	if w.HTTPMethod == "" {
+		if w.Body == "" {
+			w.HTTPMethod = http.MethodGet
+		} else {
+			w.HTTPMethod = http.MethodPost
+		}
+	}
 	// if len(w.expandedHeaders) != len(w.Headers) {
 	if w.expandedHeaders == nil {
 		expandedHeaders := make(map[string][]string)

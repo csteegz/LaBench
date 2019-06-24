@@ -2,14 +2,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"labench/bench"
-	"strings"
+	prsgrpc "labench/grpc"
 
 	"github.com/bojand/ghz/protodesc"
-	"github.com/golang/protobuf/jsonpb"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	"github.com/jhump/protoreflect/dynamic/grpcdynamic"
@@ -64,12 +61,7 @@ func (g *GRPCRequesterFactory) GetRequester(uint64) bench.Requester {
 		panic(err)
 	}
 
-	md := mtd.GetInputType()
-	payloadMessage := dynamic.NewMessage(md)
-	if payloadMessage == nil {
-		panic(fmt.Errorf("No input type of method: %s", mtd.GetName()))
-	}
-	err = messageFromMap(payloadMessage, &g.Data)
+	payloadMessage, err := prsgrpc.GetMessage(mtd, &g.Data)
 	if err != nil {
 		panic(err)
 	}
@@ -100,57 +92,3 @@ func (w *GRPCRequester) Request() error {
 }
 
 func (w *GRPCRequester) Teardown() error { return nil }
-
-// from bojand/ghz/runner/data.go
-func messageFromMap(input *dynamic.Message, data *map[string]interface{}) error {
-	strData, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-
-	err = jsonpb.UnmarshalString(string(strData), input)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func createPayloadsFromJSON(data string, mtd *desc.MethodDescriptor) ([]*dynamic.Message, error) {
-	md := mtd.GetInputType()
-	var inputs []*dynamic.Message
-
-	if len(data) > 0 {
-		if strings.IndexRune(data, '[') == 0 {
-			dataArray := make([]map[string]interface{}, 5)
-			err := json.Unmarshal([]byte(data), &dataArray)
-			if err != nil {
-				return nil, fmt.Errorf("Error unmarshalling payload. Data: '%v' Error: %v", data, err.Error())
-			}
-
-			elems := len(dataArray)
-			if elems > 0 {
-				inputs = make([]*dynamic.Message, elems)
-			}
-
-			for i, elem := range dataArray {
-				elemMsg := dynamic.NewMessage(md)
-				err := messageFromMap(elemMsg, &elem)
-				if err != nil {
-					return nil, fmt.Errorf("Error creating message: %v", err.Error())
-				}
-
-				inputs[i] = elemMsg
-			}
-		} else {
-			inputs = make([]*dynamic.Message, 1)
-			inputs[0] = dynamic.NewMessage(md)
-			err := jsonpb.UnmarshalString(data, inputs[0])
-			if err != nil {
-				return nil, fmt.Errorf("Error creating message from data. Data: '%v' Error: %v", data, err.Error())
-			}
-		}
-	}
-
-	return inputs, nil
-}

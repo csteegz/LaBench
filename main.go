@@ -67,7 +67,6 @@ func prepareRequestorFactory(conf *config) bench.RequesterFactory {
 
 	switch conf.Protocol {
 	case "GRPC":
-		fmt.Println("Using GRPC")
 		assert(conf.GRPCRequest != nil, "Tried to use GRPC but didn't provide the request infromation.")
 		return conf.GRPCRequest
 	case "HTTP/2":

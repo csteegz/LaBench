@@ -28,10 +28,10 @@ type benchParams struct {
 }
 
 type config struct {
-	Params      benchParams          `yaml:",inline"`
-	Protocol    string               `yaml:"Protocol"`
-	Request     WebRequesterFactory  `yaml:"Request"`
-	GRPCRequest GRPCRequesterFactory `yaml:"GRPCRequest"`
+	Params      benchParams           `yaml:",inline"`
+	Protocol    string                `yaml:"Protocol"`
+	Request     *WebRequesterFactory  `yaml:"Request"`
+	GRPCRequest *GRPCRequesterFactory `yaml:"GRPCRequest"`
 }
 
 func maybePanic(err error) {
@@ -68,7 +68,8 @@ func prepareRequestorFactory(conf *config) bench.RequesterFactory {
 	switch conf.Protocol {
 	case "GRPC":
 		fmt.Println("Using GRPC")
-		return &conf.GRPCRequest
+		assert(conf.GRPCRequest != nil, "Tried to use GRPC but didn't provide the request infromation.")
+		return conf.GRPCRequest
 	case "HTTP/2":
 		initHTTP2Client(conf.Params.RequestTimeout, conf.Params.DontLinger)
 	case "HTTP/1.1":
@@ -76,8 +77,8 @@ func prepareRequestorFactory(conf *config) bench.RequesterFactory {
 	default:
 		log.Panic("Invalid protocol - must be GRPC, HTTP/2 or HTTP/1.1")
 	}
-
-	return &conf.Request
+	assert(conf.Request != nil, "Didn't provide any request information.")
+	return conf.Request
 }
 
 func main() {

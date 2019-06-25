@@ -27,6 +27,8 @@ type GRPCRequesterFactory struct {
 	DataBin      []byte                  `yaml:"DataBin"`
 
 	channel *grpc.ClientConn
+	md      *desc.MethodDescriptor
+	message *dynamic.Message
 }
 
 func (g *GRPCRequesterFactory) GetChannel(reuse bool) (*grpc.ClientConn, error) {
@@ -43,12 +45,13 @@ func (g *GRPCRequesterFactory) GetChannel(reuse bool) (*grpc.ClientConn, error) 
 	return g.channel, nil
 }
 
-// GetRequester returns a new Requester, called for each Benchmark connection.
-func (g *GRPCRequesterFactory) GetRequester(uint64) bench.Requester {
+func (g *GRPCRequesterFactory) GetMethodDesc() (*desc.MethodDescriptor, error) {
 	var mtd *desc.MethodDescriptor
-	var connection *grpc.ClientConn
-	var payloadMessage *dynamic.Message
 	var err error
+
+	if g.md != nil {
+		return g.md, nil
+	}
 	if g.Proto != "" && g.Protoset == "" {
 		mtd, err = protodesc.GetMethodDescFromProto(g.Call, g.Proto, g.ImportPaths)
 	} else if g.Protoset != "" && g.Proto == "" {
@@ -56,12 +59,16 @@ func (g *GRPCRequesterFactory) GetRequester(uint64) bench.Requester {
 	} else {
 		err = errors.New("Couldn't parse proto type. Must have exactly one of Proto and Protoset set.")
 	}
-	if err != nil {
-		panic(err)
-	}
-	connection, err = g.GetChannel(g.ShareChannel)
-	if err != nil {
-		panic(err)
+	g.md = mtd
+	return mtd, err
+}
+
+func (g *GRPCRequesterFactory) GetRequestProto(mtd *desc.MethodDescriptor) (*dynamic.Message, error) {
+
+	var payloadMessage *dynamic.Message
+	var err error
+	if g.message != nil {
+		return g.message, nil
 	}
 	if g.Data != nil {
 		payloadMessage, err = prsgrpc.GetMessageMap(mtd, g.Data)
@@ -72,6 +79,24 @@ func (g *GRPCRequesterFactory) GetRequester(uint64) bench.Requester {
 	} else {
 		err = errors.New("Couldn't get body data. Must set one of Data, DataJSON or DataBin")
 	}
+	return payloadMessage, err
+}
+
+// GetRequester returns a new Requester, called for each Benchmark connection.
+func (g *GRPCRequesterFactory) GetRequester(uint64) bench.Requester {
+
+	var connection *grpc.ClientConn
+	var payloadMessage *dynamic.Message
+	var err error
+	mtd, err := g.GetMethodDesc()
+	if err != nil {
+		panic(err)
+	}
+	connection, err = g.GetChannel(g.ShareChannel)
+	if err != nil {
+		panic(err)
+	}
+	payloadMessage, err = g.GetRequestProto(mtd)
 	if err != nil {
 		panic(err)
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"labench/bench"
 	prsgrpc "labench/grpc"
+	"sync"
 
 	"github.com/bojand/ghz/protodesc"
 	"github.com/jhump/protoreflect/desc"
@@ -26,6 +27,7 @@ type GRPCRequesterFactory struct {
 	DataJSON     string                  `yaml:"DataJSON"`
 	DataBin      []byte                  `yaml:"DataBin"`
 
+	mux     sync.Mutex
 	channel *grpc.ClientConn
 	md      *desc.MethodDescriptor
 	message *dynamic.Message
@@ -52,6 +54,8 @@ func (g *GRPCRequesterFactory) GetMethodDesc() (*desc.MethodDescriptor, error) {
 	if g.md != nil {
 		return g.md, nil
 	}
+	g.mux.Lock()
+	defer g.mux.Unlock()
 	if g.Proto != "" && g.Protoset == "" {
 		mtd, err = protodesc.GetMethodDescFromProto(g.Call, g.Proto, g.ImportPaths)
 	} else if g.Protoset != "" && g.Proto == "" {
@@ -70,6 +74,8 @@ func (g *GRPCRequesterFactory) GetRequestProto(mtd *desc.MethodDescriptor) (*dyn
 	if g.message != nil {
 		return g.message, nil
 	}
+	g.mux.Lock()
+	defer g.mux.Unlock()
 	if g.Data != nil {
 		payloadMessage, err = prsgrpc.GetMessageMap(mtd, g.Data)
 	} else if g.DataJSON != "" {
@@ -79,6 +85,7 @@ func (g *GRPCRequesterFactory) GetRequestProto(mtd *desc.MethodDescriptor) (*dyn
 	} else {
 		err = errors.New("Couldn't get body data. Must set one of Data, DataJSON or DataBin")
 	}
+	g.message = payloadMessage
 	return payloadMessage, err
 }
 

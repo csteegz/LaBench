@@ -5,7 +5,6 @@ import (
 	"math"
 
 	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/proto"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 )
@@ -47,8 +46,7 @@ func GetMessageBin(mtd *desc.MethodDescriptor, data []byte) (*dynamic.Message, e
 	if payloadMessage == nil {
 		return nil, fmt.Errorf("Couldn't create message from descriptor: %s", md.GetName())
 	}
-	buffer := proto.NewBuffer(data)
-	err := buffer.DecodeMessage(payloadMessage)
+	err := payloadMessage.Unmarshal(data)
 	if err != nil {
 		return nil, err
 	}

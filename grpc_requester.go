@@ -16,28 +16,29 @@ import (
 )
 
 type GRPCRequesterFactory struct {
-	Host         string                  `yaml:"Host"`
-	Call         string                  `yaml:"Call"`
-	ShareChannel bool                    `yaml:"ShareChannel"`
-	Data         *map[string]interface{} `yaml:"Data"`
-	Header       map[string]string       `yaml:"Header"`
-	Proto        string                  `yaml:"Proto"`
-	Protoset     string                  `yaml:"Protoset"`
-	ImportPaths  []string                `yaml:"ImportPaths"`
-	DataJSON     string                  `yaml:"DataJSON"`
-	DataBin      string                  `yaml:"DataBin"`
+	Host        string                  `yaml:"Host"`
+	Call        string                  `yaml:"Call"`
+	Data        *map[string]interface{} `yaml:"Data"`
+	Header      map[string]string       `yaml:"Header"`
+	Proto       string                  `yaml:"Proto"`
+	Protoset    string                  `yaml:"Protoset"`
+	ImportPaths []string                `yaml:"ImportPaths"`
+	DataJSON    string                  `yaml:"DataJSON"`
+	DataBin     string                  `yaml:"DataBin"`
 
-	mux     sync.Mutex
-	channel *grpc.ClientConn
-	md      *desc.MethodDescriptor
-	message *dynamic.Message
+	mux         sync.Mutex
+	channel_mux sync.Mutex
+	desc_mux    sync.Mutex
+	channel     *grpc.ClientConn
+	md          *desc.MethodDescriptor
+	message     *dynamic.Message
 }
 
-func (g *GRPCRequesterFactory) GetChannel(reuse bool) (*grpc.ClientConn, error) {
+func (g *GRPCRequesterFactory) GetChannel() (*grpc.ClientConn, error) {
 	var err error
-	if !reuse {
-		return grpc.Dial(g.Host, grpc.WithInsecure())
-	}
+	g.channel_mux.Lock()
+	defer g.channel_mux.Unlock()
+
 	if g.channel == nil {
 		g.channel, err = grpc.Dial(g.Host, grpc.WithInsecure())
 		if err != nil {
@@ -50,12 +51,13 @@ func (g *GRPCRequesterFactory) GetChannel(reuse bool) (*grpc.ClientConn, error) 
 func (g *GRPCRequesterFactory) GetMethodDesc() (*desc.MethodDescriptor, error) {
 	var mtd *desc.MethodDescriptor
 	var err error
+	g.desc_mux.Lock()
+	defer g.desc_mux.Unlock()
 
 	if g.md != nil {
 		return g.md, nil
 	}
-	g.mux.Lock()
-	defer g.mux.Unlock()
+
 	if g.Proto != "" && g.Protoset == "" {
 		mtd, err = protodesc.GetMethodDescFromProto(g.Call, g.Proto, g.ImportPaths)
 	} else if g.Protoset != "" && g.Proto == "" {
@@ -71,11 +73,12 @@ func (g *GRPCRequesterFactory) GetRequestProto(mtd *desc.MethodDescriptor) (*dyn
 
 	var payloadMessage *dynamic.Message
 	var err error
+	g.mux.Lock()
+	defer g.mux.Unlock()
 	if g.message != nil {
 		return g.message, nil
 	}
-	g.mux.Lock()
-	defer g.mux.Unlock()
+
 	if g.Data != nil {
 		payloadMessage, err = prsgrpc.GetMessageMap(mtd, g.Data)
 	} else if g.DataJSON != "" {
@@ -99,7 +102,7 @@ func (g *GRPCRequesterFactory) GetRequester(uint64) bench.Requester {
 	if err != nil {
 		panic(err)
 	}
-	connection, err = g.GetChannel(g.ShareChannel)
+	connection, err = g.GetChannel()
 	if err != nil {
 		panic(err)
 	}

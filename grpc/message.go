@@ -4,16 +4,51 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/golang/protobuf/proto"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 )
 
-func GetMessage(mtd *desc.MethodDescriptor, data *map[string]interface{}) (*dynamic.Message, error) {
+func GetMessageMap(mtd *desc.MethodDescriptor, data *map[string]interface{}) (*dynamic.Message, error) {
 	md := mtd.GetInputType()
 	if md == nil {
 		return nil, fmt.Errorf("No input type of method: %s", mtd.GetName())
 	}
 	payloadMessage, err := messageFromMap(md, *data)
+	if err != nil {
+		return nil, err
+	}
+	return payloadMessage, nil
+}
+
+func GetMessageJson(mtd *desc.MethodDescriptor, data string) (*dynamic.Message, error) {
+	md := mtd.GetInputType()
+	if md == nil {
+		return nil, fmt.Errorf("No input type of method: %s", mtd.GetName())
+	}
+	payloadMessage := dynamic.NewMessage(md)
+	if payloadMessage == nil {
+		return nil, fmt.Errorf("Couldn't create message from descriptor: %s", md.GetName())
+	}
+	err := jsonpb.UnmarshalString(data, payloadMessage)
+	if err != nil {
+		return nil, err
+	}
+	return payloadMessage, nil
+}
+
+func GetMessageBin(mtd *desc.MethodDescriptor, data []byte) (*dynamic.Message, error) {
+	md := mtd.GetInputType()
+	if md == nil {
+		return nil, fmt.Errorf("No input type of method: %s", mtd.GetName())
+	}
+	payloadMessage := dynamic.NewMessage(md)
+	if payloadMessage == nil {
+		return nil, fmt.Errorf("Couldn't create message from descriptor: %s", md.GetName())
+	}
+	buffer := proto.NewBuffer(data)
+	err := buffer.DecodeMessage(payloadMessage)
 	if err != nil {
 		return nil, err
 	}

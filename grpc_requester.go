@@ -15,14 +15,16 @@ import (
 )
 
 type GRPCRequesterFactory struct {
-	Host         string                 `yaml:"Host"`
-	Call         string                 `yaml:"Call"`
-	ShareChannel bool                   `yaml:"ShareChannel"`
-	Data         map[string]interface{} `yaml:"Data"`
-	Header       map[string]string      `yaml:"Header"`
-	Proto        string                 `yaml:"Proto"`
-	Protoset     string                 `yaml:"Protoset"`
-	ImportPaths  []string               `yaml:"ImportPaths"`
+	Host         string                  `yaml:"Host"`
+	Call         string                  `yaml:"Call"`
+	ShareChannel bool                    `yaml:"ShareChannel"`
+	Data         *map[string]interface{} `yaml:"Data"`
+	Header       map[string]string       `yaml:"Header"`
+	Proto        string                  `yaml:"Proto"`
+	Protoset     string                  `yaml:"Protoset"`
+	ImportPaths  []string                `yaml:"ImportPaths"`
+	DataJSON     string                  `yaml:"DataJSON"`
+	DataBin      []byte                  `yaml:"DataBin"`
 
 	channel *grpc.ClientConn
 }
@@ -45,13 +47,14 @@ func (g *GRPCRequesterFactory) GetChannel(reuse bool) (*grpc.ClientConn, error) 
 func (g *GRPCRequesterFactory) GetRequester(uint64) bench.Requester {
 	var mtd *desc.MethodDescriptor
 	var connection *grpc.ClientConn
+	var payloadMessage *dynamic.Message
 	var err error
-	if g.Proto != "" {
+	if g.Proto != "" && g.Protoset == "" {
 		mtd, err = protodesc.GetMethodDescFromProto(g.Call, g.Proto, g.ImportPaths)
-	} else if g.Protoset != "" {
+	} else if g.Protoset != "" && g.Proto == "" {
 		mtd, err = protodesc.GetMethodDescFromProtoSet(g.Call, g.Protoset)
 	} else {
-		err = errors.New("Couldn't parse proto type.")
+		err = errors.New("Couldn't parse proto type. Must have exactly one of Proto and Protoset set.")
 	}
 	if err != nil {
 		panic(err)
@@ -60,8 +63,15 @@ func (g *GRPCRequesterFactory) GetRequester(uint64) bench.Requester {
 	if err != nil {
 		panic(err)
 	}
-
-	payloadMessage, err := prsgrpc.GetMessage(mtd, &g.Data)
+	if g.Data != nil {
+		payloadMessage, err = prsgrpc.GetMessageMap(mtd, g.Data)
+	} else if g.DataJSON != "" {
+		payloadMessage, err = prsgrpc.GetMessageJson(mtd, g.DataJSON)
+	} else if len(g.DataBin) != 0 {
+		payloadMessage, err = prsgrpc.GetMessageBin(mtd, g.DataBin)
+	} else {
+		err = errors.New("Couldn't get body data. Must set one of Data, DataJSON or DataBin")
+	}
 	if err != nil {
 		panic(err)
 	}

@@ -25,7 +25,7 @@ type GRPCRequesterFactory struct {
 	Protoset     string                  `yaml:"Protoset"`
 	ImportPaths  []string                `yaml:"ImportPaths"`
 	DataJSON     string                  `yaml:"DataJSON"`
-	DataBin      []byte                  `yaml:"DataBin"`
+	DataBin      string                  `yaml:"DataBin"`
 
 	mux     sync.Mutex
 	channel *grpc.ClientConn
@@ -81,7 +81,7 @@ func (g *GRPCRequesterFactory) GetRequestProto(mtd *desc.MethodDescriptor) (*dyn
 	} else if g.DataJSON != "" {
 		payloadMessage, err = prsgrpc.GetMessageJson(mtd, g.DataJSON)
 	} else if len(g.DataBin) != 0 {
-		payloadMessage, err = prsgrpc.GetMessageBin(mtd, g.DataBin)
+		payloadMessage, err = prsgrpc.GetMessageBin(mtd, []byte(g.DataBin))
 	} else {
 		err = errors.New("Couldn't get body data. Must set one of Data, DataJSON or DataBin")
 	}
